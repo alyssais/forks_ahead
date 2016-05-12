@@ -1,0 +1,64 @@
+require "typhoeus"
+require "json"
+require "uri"
+
+def get(path, params = {}, &block)
+  url = URI.join("https://api.github.com", path)
+  headers = { Authorization: "token [REDACTED]" }
+  request = Typhoeus::Request.new(url, params: params, headers: headers)
+  request.on_complete do |response|
+    result = JSON.parse(response.body, symbolize_names: true)
+    proc { |*args| block.call *args }.(result, response)
+  end
+  Typhoeus::Hydra.hydra.queue request
+end
+
+# processes each result as ready
+def get_each(path, params = {}, page_number = 1, &block)
+  params = params.merge(page: page_number, per_page: 100)
+  get(path, params) do |page|
+    unless page.empty?
+      get_each(path, params, page_number + 1, &block)
+      page.each(&block)
+    end
+  end
+end
+
+# waits until finished
+def get_all(path, params = {}, page = 1, &block)
+  params = params.merge(page: page, per_page: 100)
+  result = []
+  get(path, params) do |page|
+    if page.empty?
+      block.call result
+    else
+      result.concat(page)
+      get_all(path, params, page + 1, &block)
+    end
+  end
+end
+
+repo_owner = ARGV[0]
+repo_name = ARGV[1] || repo_owner
+get "repos/#{repo_owner}/#{repo_name}" do |repo|
+  get_each "repos/#{repo_owner}/#{repo_name}/forks", sort: :oldest do |fork|
+    get_each "repos/#{fork[:owner][:login]}/#{fork[:name]}/branches" do |branch|
+      get "repos/#{fork[:owner][:login]}/#{fork[:name]}/compare/#{repo_owner}:#{branch[:name]}...#{fork[:owner][:login]}:#{branch[:name]}" do |comparison, response|
+        case response.code
+        when 404
+          get "repos/#{fork[:owner][:login]}/#{fork[:name]}/compare/#{repo_owner}:#{repo[:default_branch]}...#{fork[:owner][:login]}:#{branch[:name]}" do |comparison, response|
+            if 200 <= response.code && response.code < 300 && comparison[:ahead_by] > 0
+              puts "#{fork[:owner][:login]}/#{fork[:name]}:#{branch[:name]} ahead of #{repo_owner}:#{repo[:default_branch]} by #{comparison[:ahead_by]}"
+            end
+          end
+        when 200...300
+          if comparison[:ahead_by] > 0
+            puts "#{fork[:owner][:login]}/#{fork[:name]}:#{branch[:name]} ahead by #{comparison[:ahead_by]}"
+          end
+        end
+      end
+    end
+  end
+end
+
+Typhoeus::Hydra.hydra.run
