@@ -1,3 +1,9 @@
+PATH
+  remote: .
+  specs:
+    forks_ahead (0.0.1)
+      typhoeus (~> 1.0.2)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -11,7 +17,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
-  typhoeus (= 1.0.2)
+  forks_ahead!
 
 BUNDLED WITH
    1.11.2
