@@ -5,11 +5,26 @@ require "uri"
 
 def get(path, params = {}, &block)
   url = URI.join("https://api.github.com", path)
-  headers = { Authorization: "token [REDACTED]" }
+  headers = { Authorization: case
+  when token = ENV["FORKS_AHEAD_GITHUB_TOKEN"]
+    "token #{token}"
+  when u = ENV["FORKS_AHEAD_GITHUB_LOGIN"] && p = ENV["FORKS_AHEAD_GITHUB_PASSWORD"]
+    require "base64"
+    "basic #{Base64.encode64("#{u}:#{p}").gsub("\n", "")}"
+  end }
   request = Typhoeus::Request.new(url, params: params, headers: headers)
   request.on_complete do |response|
+    if 200 > response.code || response.code >= 300 && response.code != 404
+      puts "#{response.code} #{url}\n#{response.body}"
+    end
+
+    if response.code.zero?
+      puts response.return_code.to_s
+      exit 1
+    end
+
     result = JSON.parse(response.body, symbolize_names: true)
-    proc { |*args| block.call *args }.(result, response)
+    yield result
   end
   Typhoeus::Hydra.hydra.queue request
 end
@@ -44,15 +59,15 @@ repo_name = ARGV[1] || repo_owner
 get "repos/#{repo_owner}/#{repo_name}" do |repo|
   get_each "repos/#{repo_owner}/#{repo_name}/forks", sort: :oldest do |fork|
     get_each "repos/#{fork[:owner][:login]}/#{fork[:name]}/branches" do |branch|
-      get "repos/#{fork[:owner][:login]}/#{fork[:name]}/compare/#{repo_owner}:#{branch[:name]}...#{fork[:owner][:login]}:#{branch[:name]}" do |comparison, response|
-        case response.code
-        when 404
-          get "repos/#{fork[:owner][:login]}/#{fork[:name]}/compare/#{repo_owner}:#{repo[:default_branch]}...#{fork[:owner][:login]}:#{branch[:name]}" do |comparison, response|
-            if 200 <= response.code && response.code < 300 && comparison[:ahead_by] > 0
+      get "repos/#{fork[:owner][:login]}/#{fork[:name]}/compare/#{repo_owner}:#{branch[:name]}...#{fork[:owner][:login]}:#{branch[:name]}" do |comparison|
+        case comparison[:message]
+        when "Not Found"
+          get "repos/#{fork[:owner][:login]}/#{fork[:name]}/compare/#{repo_owner}:#{repo[:default_branch]}...#{fork[:owner][:login]}:#{branch[:name]}" do |comparison|
+            if comparison[:ahead_by] > 0
               puts "#{fork[:owner][:login]}/#{fork[:name]}:#{branch[:name]} ahead of #{repo_owner}:#{repo[:default_branch]} by #{comparison[:ahead_by]}"
             end
           end
-        when 200...300
+        else
           if comparison[:ahead_by] > 0
             puts "#{fork[:owner][:login]}/#{fork[:name]}:#{branch[:name]} ahead by #{comparison[:ahead_by]}"
           end
