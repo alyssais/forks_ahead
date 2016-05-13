@@ -20,6 +20,25 @@ forks_ahead <owner> <repo>
 
 Where `<owner>` is the owner of the base repository and `<repo>` is the name of the base repository.
 
+### Authentication
+
+GitHub's anonymous rate limits probably won't be enough for this tool to work
+correctly on a repository of any popularity, so you will probably need to
+authenticate with GitHub.
+
+#### Token Authentication
+
+Create an [OAuth token](https://github.com/blog/1509-personal-api-tokens) with `repo` permissions (`private_repo` is required to 
+access private repositories), and set it as the `FORKS_AHEAD_GITHUB_TOKEN`.
+This is the preferred way of authenticating.
+
+#### Basic Authentication
+
+Set your GitHub login as the `FORKS_AHEAD_GITHUB_LOGIN` environment variable
+and your GitHub password as `FORKS_AHEAD_GITHUB_PASSWORD`.
+
+This will not work if you have two-factor authentication enabled on your GitHub account.
+
 ### Sample
 
 ```sh
