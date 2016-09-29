@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = "forks_ahead"
-  s.version = "0.0.1"
+  s.version = "0.0.2"
   s.summary = "Find forks of a GitHub project that are ahead of the base"
   s.homepage = "https://github.com/alyssais/forks_ahead"
   s.author = "Alyssa Ross"
